@@ -1,0 +1,58 @@
+# Stack 4.0 Training Config for Llama 3.1 8B
+# Optimized for V100 16GB (single GPU)
+# Target: agentic tool-use, reasoning traces, task completion
+
+base_model: meta-llama/Meta-Llama-3.1-8B-Instruct
+model_type: llama
+trust_remote_code: true
+
+# Tokenizer
+tokenizer: meta-llama/Meta-Llama-3.1-8B-Instruct
+tokenizer_use_system_format: true
+sequence_len: 8192
+
+# LoRA Configuration
+lora:
+  r: 32
+  alpha: 64
+  dropout: 0.05
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+# Training Configuration
+batch_size: 2
+gradient_accumulation: 8
+optimizer: adamw_torch
+learning_rate: 1.0e-4
+warmup_steps: 100
+num_epochs: 3
+max_grad_norm: 1.0
+logging_steps: 10
+eval_steps: 500
+save_steps: 1000
+save_total_limit: 3
+bf16: true
+gradient_checkpointing: true
+optim: adamw_torch
+
+# Data from HuggingFace dataset
+datasets:
+  - path: my-ai-stack/Stack-4.0-Dataset
+    format: chat
+    role_key: role
+    content_key: content
+
+# Output
+output_dir: /tmp/stack-4.0-output
+adapter_name: stack-4.0-lora
+
+# Hardware
+num_gpus: 1
