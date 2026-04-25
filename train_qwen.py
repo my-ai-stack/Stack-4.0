@@ -153,13 +153,8 @@ def main():
         token=hf_token,
     )
 
-    # Prepare for training with gradient checkpointing
-    model = prepare_model_for_kbit_training(
-        model,
-        use_gradient_checkpointing=True,
-    )
-
-    # Attach LoRA
+    # Attach LoRA directly — bf16 model doesn't need prepare_model_for_kbit_training
+    # (that call is only for 4-bit quantized models that need fp32 conversion)
     lora_cfg = LoraConfig(
         r=LORA_R,
         lora_alpha=LORA_ALPHA,
