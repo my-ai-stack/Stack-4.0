@@ -54,7 +54,7 @@ for fname in files:
         continue
 
     size_gb = fpath.stat().st_size / 1024**3
-    logger.info(f"Uploading {fname} ({size_gb:.1f}GB)...", end=" ", flush=True)
+    logger.info(f"Uploading {fname} ({size_gb:.1f}GB)...")
 
     try:
         upload_file(
