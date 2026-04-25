@@ -103,12 +103,20 @@ def check_vram(label=""):
 # ─── Main ───────────────────────────────────────────────────────────────────
 
 def main():
-    hf_token = os.environ.get("HF_TOKEN", "")
+    hf_token = (
+        os.environ.get("HF_TOKEN", "")
+        or os.environ.get("HUGGING_FACE_HUB_TOKEN", "")
+    )
+    if not hf_token:
+        token_path = Path.home() / ".cache" / "huggingface" / "token"
+        if token_path.exists():
+            hf_token = token_path.read_text().strip()
     if not hf_token:
         logger.error("Set HF_TOKEN env var")
         sys.exit(1)
 
     logger.info("=" * 60)
+    logger.info(f"Token: {hf_token[:8]}...")
     logger.info("Stack 4.0 Training — Llama 3.1 8B QLoRA")
     logger.info(f"V100 16GB | save every {CFG['save_steps']} steps")
     logger.info("=" * 60)
