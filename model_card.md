@@ -15,6 +15,17 @@ pipeline_tag: text-generation
 
 A 3-billion parameter instruction-tuned coding model, fine-tuned from Qwen2.5-Coder-3B-Instruct on 55,000 agentic tool-use conversations. Designed for developers who want a fast, local-friendly AI that can reason about when and how to use external tools.
 
+## Training Results
+
+| Metric | Value |
+|--------|-------|
+| Final training loss | **0.1411** |
+| Training steps | 1,000 |
+| Total training time | ~10 hours |
+| Hardware | GCP Tesla V100 16GB |
+
+**Loss curve:** 2.73 (step 1) → 0.14 (step 1000) — clean convergence, no instability.
+
 ## Key Differences from Stack 3.0
 
 | | Stack 3.0 | Stack 4.0 |
@@ -31,12 +42,12 @@ Stack 4.0 is lighter, faster, and easier to run locally — while maintaining mo
 
 | Benchmark | Score | Notes |
 |-----------|-------|-------|
-| HumanEval | TBD | Pending full eval |
-| ARC-C | TBD | Pending full eval |
-| MMLU | TBD | Pending full eval |
-| GSM8K | TBD | Pending full eval |
+| HumanEval | Pending | Full eval pending |
+| ARC-C | Pending | Full eval pending |
+| MMLU | Pending | Full eval pending |
+| GSM8K | Pending | Full eval pending |
 
-*Note: 3B models typically score lower than 7B on standard benchmarks. Tool-use reasoning is the focus, not beating benchmarks on larger models.*
+*Note: 3B models typically score lower than 7B on standard benchmarks. Tool-use reasoning is the focus.*
 
 ## Training Details
 
@@ -50,8 +61,7 @@ Stack 4.0 is lighter, faster, and easier to run locally — while maintaining mo
 | Grad accumulation | 16 |
 | Max length | 512 |
 | Learning rate | 2e-4 |
-| Training steps | 1,000 |
-| Final loss | ~0.12 |
+| Final loss | 0.1411 |
 | Hardware | GCP Tesla V100 16GB |
 | Training time | ~10 hours |
 
@@ -103,17 +113,13 @@ print(response)
 
 ### Ollama
 ```bash
-# Coming soon — GGUF conversion in progress
+# GGUF conversion in progress
 ollama run my-ai-stack/stack-4-0-omninexus-agentic
 ```
 
 ### transformers + peft
 ```bash
 pip install transformers peft accelerate
-```
-
-```python
-# See example above
 ```
 
 ## Limitations
