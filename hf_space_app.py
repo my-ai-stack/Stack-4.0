@@ -51,8 +51,8 @@ def respond(message, history, system_prompt, temperature, max_tokens):
     return reply.strip()
 
 
-with gr.Blocks(title="Stack 4.0 Agentic AI", theme=gr.themes.Soft()) as demo:
-    gr.Markdown(f"# 🧠 Stack 4.0 — Agentic AI\nModel: `{ADAPTER_REPO}`")
+with gr.Blocks(title="Stack 4.0 Omni-Nexus-Agentic", theme=gr.themes.Soft()) as demo:
+    gr.Markdown(f"# 🧠 Stack 4.0 Omni-Nexus-Agentic\nModel: `{ADAPTER_REPO}`")
     with gr.Row():
         chat = gr.Chatbot(height=500, show_copy_button=True)
         with gr.Column():
