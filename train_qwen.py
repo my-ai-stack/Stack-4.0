@@ -44,7 +44,6 @@ LR = 2e-4
 WARMUP = 50
 MAX_STEPS = 1000
 SAVE_STEPS = 100
-EVAL_STEPS = 100
 MAX_GRAD_NORM = 0.5
 WEIGHT_DECAY = 0.01
 SEED = 42
@@ -221,8 +220,7 @@ def main():
         gradient_checkpointing_kwargs={"use_reentrant": False},
         optim="adamw_torch",
         logging_steps=10,
-        eval_strategy="steps",
-        eval_steps=EVAL_STEPS,
+        eval_strategy="no",
         save_strategy="steps",
         save_steps=SAVE_STEPS,
         save_total_limit=3,
