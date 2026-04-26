@@ -134,7 +134,7 @@ def load_jsonl_dataset(repo_id, tokenizer, hf_token):
     return Dataset.from_list(examples)
 
 
-def tokenize_dataset(ds, tokenizer, max_len=1024):
+def tokenize_dataset(ds, tokenizer, max_len=512):
     """Add tokenized input_ids to dataset for DataCollatorForLanguageModeling."""
     def tok(example):
         enc = tokenizer(
@@ -181,9 +181,10 @@ def main():
     train_ds, eval_ds = split["train"], split["test"]
     logger.info(f"Train: {len(train_ds)} | Eval: {len(eval_ds)}")
 
-    # Model — bf16 with headroom
-    max_memory = {0: "14GiB", "cpu": "80GiB"}
+    # Reduce model VRAM by leaving less headroom
+    max_memory = {0: "13.5GiB", "cpu": "80GiB"}
     logger.info(f"Loading model: {MODEL_NAME}")
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
     torch.cuda.reset_peak_memory_stats()
 
     model = AutoModelForCausalLM.from_pretrained(
