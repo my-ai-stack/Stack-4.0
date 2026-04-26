@@ -134,6 +134,27 @@ def load_jsonl_dataset(repo_id, tokenizer, hf_token):
     return Dataset.from_list(examples)
 
 
+def tokenize_dataset(ds, tokenizer, max_len=1024):
+    """Add tokenized input_ids to dataset for DataCollatorForLanguageModeling."""
+    def tok(example):
+        enc = tokenizer(
+            example["text"],
+            max_length=max_len,
+            padding="max_length",
+            truncation=True,
+            return_tensors=None,
+        )
+        return {
+            "input_ids": enc["input_ids"],
+            "attention_mask": enc["attention_mask"],
+            "labels": enc["input_ids"],
+        }
+
+    logger.info(f"Tokenizing dataset (max_len={max_len})...")
+    ds = ds.map(tok, remove_columns=["text"], num_proc=4)
+    return ds
+
+
 def main():
     hf_token = get_token()
     logger.info("=" * 60)
@@ -152,6 +173,9 @@ def main():
     # Dataset
     logger.info(f"Loading dataset from: {DATASET_REPO}")
     ds = load_jsonl_dataset(DATASET_REPO, tokenizer, hf_token)
+
+    # Tokenize for trainer
+    ds = tokenize_dataset(ds, tokenizer, max_len=1024)
 
     split = ds.train_test_split(test_size=0.05, seed=SEED)
     train_ds, eval_ds = split["train"], split["test"]
