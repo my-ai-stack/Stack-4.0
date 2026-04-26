@@ -197,7 +197,7 @@ def main():
         bf16=True,
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
-        optim="paged_adamw_32bit",
+        optim="adamw_torch",
         logging_steps=10,
         eval_strategy="steps",
         eval_steps=EVAL_STEPS,
