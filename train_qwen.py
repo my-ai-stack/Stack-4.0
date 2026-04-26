@@ -38,7 +38,7 @@ OUTPUT_DIR = "/home/walidsobhi/stack-4.0-adapter"
 ADAPTER_DIR = "/home/walidsobhi/stack-4.0-adapter/lora_adapter"
 
 EPOCHS = 2
-BATCH_SIZE = 2
+BATCH_SIZE = 4
 GRAD_ACCUM = 32
 LR = 2e-4
 WARMUP = 50
