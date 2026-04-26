@@ -181,10 +181,8 @@ def main():
     train_ds, eval_ds = split["train"], split["test"]
     logger.info(f"Train: {len(train_ds)} | Eval: {len(eval_ds)}")
 
-    # Reduce model VRAM by leaving less headroom
-    max_memory = {0: "13.5GiB", "cpu": "80GiB"}
+    # Model — bf16 on GPU (let device_map decide, no CPU offloading for training)
     logger.info(f"Loading model: {MODEL_NAME}")
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
     torch.cuda.reset_peak_memory_stats()
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -192,7 +190,6 @@ def main():
         trust_remote_code=True,
         torch_dtype=torch.bfloat16,
         device_map="auto",
-        max_memory=max_memory,
         token=hf_token,
     )
 
