@@ -1,0 +1,45 @@
+{
+  "model": "my-ai-stack/Stack-4.0-Qwen-3B-Merged",
+  "date": "2026-04-26",
+  "hardware": "GCP Tesla V100 16GB",
+  "training": {
+    "final_loss": 0.1411,
+    "total_steps": 1000,
+    "effective_batch_size": 16,
+    "learning_rate": 2e-4,
+    "method": "QLoRA",
+    "trainable_params": "7.3M / 3.1B (0.24%)",
+    "training_time": "~10 hours",
+    "cost": "$23 GCP spot instance"
+  },
+  "benchmarks": {
+    "hellaswag": {
+      "acc_norm": 0.74,
+      "acc": 0.52,
+      "n_samples": 50,
+      "note": "50-sample eval (lm_eval --limit 50)"
+    },
+    "arc_challenge": {
+      "acc_norm": 0.52,
+      "acc": 0.48,
+      "n_samples": 50,
+      "note": "50-sample eval"
+    }
+  },
+  "comparison_vs_stack3": {
+    "hellaswag_acc_norm": {
+      "stack_3_0_7b": 0.5961,
+      "stack_4_0_3b": 0.74,
+      "delta": "+14.4%"
+    },
+    "arc_challenge_acc_norm": {
+      "stack_3_0_7b": 0.8328,
+      "stack_4_0_3b": 0.52,
+      "note": "3B model expected lower than 7B"
+    }
+  },
+  "coding_sample": {
+    "score": "10/10",
+    "note": "Internal sample of 10 coding problems — all produced valid code"
+  }
+}
