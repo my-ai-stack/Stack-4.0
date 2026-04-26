@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Stack 4.0 Training — Qwen2.5-Coder-7B QLoRA on V100 16GB
+Stack 4.0 Training — Qwen2.5-Coder-3B QLoRA on V100 16GB
 Checkpoint every 100 steps. Loads dataset directly from HF JSONL files.
 No bitsandbytes — uses bf16 + paged AdamW.
 """
@@ -31,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ─── Config ─────────────────────────────────────────────────────────────────
-MODEL_NAME = "Qwen/Qwen2.5-Coder-7B-Instruct"
+MODEL_NAME = "Qwen/Qwen2.5-Coder-3B-Instruct"
 FALLBACK_MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct"
 DATASET_REPO = "my-ai-stack/Stack-4.0-Dataset"
 OUTPUT_DIR = "/home/walidsobhi/stack-4.0-adapter"
@@ -158,7 +158,7 @@ def tokenize_dataset(ds, tokenizer, max_len=512):
 def main():
     hf_token = get_token()
     logger.info("=" * 60)
-    logger.info("Stack 4.0 Training — Qwen2.5-Coder-7B QLoRA")
+    logger.info("Stack 4.0 Training — Qwen2.5-Coder-3B QLoRA")
     logger.info(f"Token: {hf_token[:8]}...")
     logger.info("=" * 60)
 
@@ -229,7 +229,7 @@ def main():
         load_best_model_at_end=False,
         report_to="none",
         seed=SEED,
-        hub_model_id="my-ai-stack/Stack-4.0-Qwen-Agentic",
+        hub_model_id="my-ai-stack/Stack-4.0-Qwen-3B-Agentic",
         hub_token=hf_token,
         push_to_hub=False,
         logging_first_step=True,
@@ -266,11 +266,11 @@ def main():
     from huggingface_hub import HfApi, create_repo
     api = HfApi(token=hf_token)
     try:
-        create_repo("my-ai-stack/Stack-4.0-Qwen-Agentic", exist_ok=True, repo_type="model")
+        create_repo("my-ai-stack/Stack-4.0-Qwen-3B-Agentic", exist_ok=True, repo_type="model")
     except Exception as e:
         logger.warning(f"Repo: {e}")
-    api.upload_folder(folder_path=ADAPTER_DIR, repo_id="my-ai-stack/Stack-4.0-Qwen-Agentic", repo_type="model")
-    logger.info("✅ https://huggingface.co/my-ai-stack/Stack-4.0-Qwen-Agentic")
+    api.upload_folder(folder_path=ADAPTER_DIR, repo_id="my-ai-stack/Stack-4.0-Qwen-3B-Agentic", repo_type="model")
+    logger.info("✅ https://huggingface.co/my-ai-stack/Stack-4.0-Qwen-3B-Agentic")
 
     # Cleanup
     del model, trainer
