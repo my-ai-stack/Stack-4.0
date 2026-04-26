@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Stack 4.0 Training — Qwen2.5-Coder-7B (or 3B fallback) QLoRA on V100 16GB
-Uses full 55K agentic dataset. No bitsandbytes — uses native bf16 + CPU offload.
-Checkpoint saving every 100 steps.
+Stack 4.0 Training — Qwen2.5-Coder-7B QLoRA on V100 16GB
+Checkpoint every 100 steps. Loads dataset directly from HF JSONL files.
+No bitsandbytes — uses bf16 + paged AdamW.
 """
 
 import os, sys, gc, json, logging
@@ -17,8 +17,8 @@ from transformers import (
     DataCollatorForLanguageModeling,
     set_seed,
 )
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
-from datasets import load_dataset
+from peft import LoraConfig, get_peft_model
+from datasets import Dataset
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,14 +33,13 @@ logger = logging.getLogger(__name__)
 # ─── Config ─────────────────────────────────────────────────────────────────
 MODEL_NAME = "Qwen/Qwen2.5-Coder-7B-Instruct"
 FALLBACK_MODEL = "Qwen/Qwen2.5-Coder-3B-Instruct"
-DATASET = "my-ai-stack/Stack-4.0-Dataset"
+DATASET_REPO = "my-ai-stack/Stack-4.0-Dataset"
 OUTPUT_DIR = "/home/walidsobhi/stack-4.0-adapter"
 ADAPTER_DIR = "/home/walidsobhi/stack-4.0-adapter/lora_adapter"
 
-# Training
 EPOCHS = 2
 BATCH_SIZE = 1
-GRAD_ACCUM = 32          # effective = 32
+GRAD_ACCUM = 32
 LR = 2e-4
 WARMUP = 50
 MAX_STEPS = 1000
@@ -49,30 +48,25 @@ EVAL_STEPS = 100
 MAX_GRAD_NORM = 0.5
 WEIGHT_DECAY = 0.01
 SEED = 42
-
-# LoRA
 LORA_R = 16
 LORA_ALPHA = 32
 LORA_DROPOUT = 0.05
 LORA_TARGET = ["q_proj", "k_proj", "v_proj", "o_proj"]
-
-# VRAM: use 7B if it fits, else fall back to 3B
-USE_FALLBACK = os.environ.get("USE_FALLBACK_MODEL", "0") == "1"
 
 set_seed(SEED)
 START = datetime.now()
 
 
 def get_token():
-    token = os.environ.get("HF_TOKEN", "") or os.environ.get("HUGGING_FACE_HUB_TOKEN", "")
-    if not token:
+    t = os.environ.get("HF_TOKEN", "") or os.environ.get("HUGGING_FACE_HUB_TOKEN", "")
+    if not t:
         p = Path.home() / ".cache" / "huggingface" / "token"
         if p.exists():
-            token = p.read_text().strip()
-    if not token:
-        logger.error("No HF token found — set HF_TOKEN env var or ~/.cache/huggingface/token")
+            t = p.read_text().strip()
+    if not t:
+        logger.error("No HF token — set HF_TOKEN env var")
         sys.exit(1)
-    return token
+    return t
 
 
 def check_vram(label=""):
@@ -90,62 +84,86 @@ def format_example(ex):
         content = m.get("content", "")
         if role == "assistant" and not content and m.get("tool_calls"):
             tc = m["tool_calls"]
-            content = f"<think>\nI'll use a tool to help.\n</think>\n<tool_call>\n{json.dumps(tc)}\n</tool_call>"
+            content = f"<think>\nI'll use a tool.\n</think>\n<tool_call>\n{json.dumps(tc)}\n</tool_call>"
         if content:
             out.append({"role": role, "content": content})
     return {"messages": out}
 
 
-def prepare_batch(ex, tokenizer):
-    try:
-        formatted = format_example(ex)
-        text = tokenizer.apply_chat_template(
-            formatted["messages"],
-            tokenize=False,
-            add_generation_prompt=False,
-        )
-        if len(text) < 30:
-            return {"text": ""}
-        if len(text) > 8000:
-            text = text[:8000]
-        return {"text": text}
-    except Exception:
-        return {"text": ""}
+def load_jsonl_dataset(repo_id, tokenizer, hf_token):
+    """Load dataset from HF dataset repo JSONL files — avoids feature compatibility issues."""
+    from huggingface_hub import hf_hub_download
+
+    # Pick the smart subset — best quality examples
+    jsonl_file = "agentic_data/tool_examples_smart_20k.jsonl"
+    logger.info(f"Downloading {jsonl_file} from {repo_id}...")
+
+    local_path = hf_hub_download(
+        repo_id=repo_id,
+        filename=jsonl_file,
+        repo_type="dataset",
+        token=hf_token,
+        local_dir="/tmp/stack4ds",
+    )
+    logger.info(f"Dataset file: {local_path}")
+
+    examples = []
+    skipped = 0
+    with open(local_path, "r") as f:
+        for i, line in enumerate(f):
+            if not line.strip():
+                continue
+            try:
+                ex = json.loads(line)
+                formatted = format_example(ex)
+                text = tokenizer.apply_chat_template(
+                    formatted["messages"],
+                    tokenize=False,
+                    add_generation_prompt=False,
+                )
+                if 30 <= len(text) <= 8000:
+                    examples.append({"text": text})
+                else:
+                    skipped += 1
+            except Exception:
+                skipped += 1
+            if i > 0 and i % 5000 == 0:
+                logger.info(f"  Processed {i} lines, {len(examples)} kept, {skipped} skipped")
+
+    logger.info(f"Loaded {len(examples)} examples ({skipped} skipped)")
+    return Dataset.from_list(examples)
 
 
 def main():
     hf_token = get_token()
     logger.info("=" * 60)
-    logger.info("Stack 4.0 Training — Qwen2.5-Coder QLoRA")
+    logger.info("Stack 4.0 Training — Qwen2.5-Coder-7B QLoRA")
     logger.info(f"Token: {hf_token[:8]}...")
     logger.info("=" * 60)
 
-    # ── Determine which model to use ─────────────────────────────────────────
-    model_name = MODEL_NAME
-    if USE_FALLBACK:
-        model_name = FALLBACK_MODEL
-        logger.info("Using 3B model (fallback mode)")
-
-    # ── Tokenizer ─────────────────────────────────────────────────────────────
-    logger.info(f"Loading tokenizer: {model_name}")
+    # Tokenizer
+    logger.info(f"Loading tokenizer: {MODEL_NAME}")
     tokenizer = AutoTokenizer.from_pretrained(
-        model_name,
-        trust_remote_code=True,
-        use_fast=True,
-        token=hf_token,
+        MODEL_NAME, trust_remote_code=True, use_fast=True, token=hf_token
     )
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
 
-    # ── Model — bfloat16 with CPU offload for VRAM management ─────────────────
-    # Use max_memory to leave headroom for training
+    # Dataset
+    logger.info(f"Loading dataset from: {DATASET_REPO}")
+    ds = load_jsonl_dataset(DATASET_REPO, tokenizer, hf_token)
+
+    split = ds.train_test_split(test_size=0.05, seed=SEED)
+    train_ds, eval_ds = split["train"], split["test"]
+    logger.info(f"Train: {len(train_ds)} | Eval: {len(eval_ds)}")
+
+    # Model — bf16 with headroom
     max_memory = {0: "14GiB", "cpu": "80GiB"}
-    
-    logger.info(f"Loading model: {model_name} (bfloat16 + device_map auto)")
+    logger.info(f"Loading model: {MODEL_NAME}")
     torch.cuda.reset_peak_memory_stats()
 
     model = AutoModelForCausalLM.from_pretrained(
-        model_name,
+        MODEL_NAME,
         trust_remote_code=True,
         torch_dtype=torch.bfloat16,
         device_map="auto",
@@ -153,43 +171,20 @@ def main():
         token=hf_token,
     )
 
-    # Attach LoRA directly — bf16 model doesn't need prepare_model_for_kbit_training
-    # (that call is only for 4-bit quantized models that need fp32 conversion)
+    # LoRA
     lora_cfg = LoraConfig(
-        r=LORA_R,
-        lora_alpha=LORA_ALPHA,
-        lora_dropout=LORA_DROPOUT,
-        target_modules=LORA_TARGET,
-        bias="none",
-        task_type="CAUSAL_LM",
+        r=LORA_R, lora_alpha=LORA_ALPHA, lora_dropout=LORA_DROPOUT,
+        target_modules=LORA_TARGET, bias="none", task_type="CAUSAL_LM",
     )
     model = get_peft_model(model, lora_cfg)
 
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total = sum(p.numel() for p in model.parameters())
     logger.info(f"Trainable: {trainable:,} / {total:,} ({100*trainable/total:.2f}%)")
-    check_vram("after model+LoRA load")
+    check_vram("after model+LoRA")
 
-    # ── Dataset ───────────────────────────────────────────────────────────────
-    logger.info(f"Loading dataset: {DATASET}")
-    ds = load_dataset(DATASET, split="train")
-    logger.info(f"Total examples: {len(ds)}")
-
-    ds = ds.map(
-        lambda ex: prepare_batch(ex, tokenizer),
-        remove_columns=ds.column_names,
-        num_proc=4,
-    )
-    ds = ds.filter(lambda x: x["text"] and len(x["text"]) > 30)
-    logger.info(f"After filter: {len(ds)}")
-
-    split = ds.train_test_split(test_size=0.05, seed=SEED)
-    train_ds, eval_ds = split["train"], split["test"]
-    logger.info(f"Train: {len(train_ds)} | Eval: {len(eval_ds)}")
-
-    # ── Training Arguments ───────────────────────────────────────────────────
+    # Training args
     Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
         max_steps=MAX_STEPS,
@@ -200,10 +195,9 @@ def main():
         max_grad_norm=MAX_GRAD_NORM,
         weight_decay=WEIGHT_DECAY,
         bf16=True,
-        fp16=False,
         gradient_checkpointing=True,
         gradient_checkpointing_kwargs={"use_reentrant": False},
-        optim="paged_adamw_32bit",   # memory-efficient optimizer (no bitsandbytes needed)
+        optim="paged_adamw_32bit",
         logging_steps=10,
         eval_strategy="steps",
         eval_steps=EVAL_STEPS,
@@ -218,11 +212,8 @@ def main():
         push_to_hub=False,
         logging_first_step=True,
         remove_unused_columns=False,
-        dataloader_num_workers=2,
-        dataloader_pin_memory=True,
     )
 
-    # ── Trainer ─────────────────────────────────────────────────────────────
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -231,48 +222,40 @@ def main():
         data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False),
     )
 
-    eff_batch = BATCH_SIZE * GRAD_ACCUM
-    logger.info(f"Model: {model_name}")
-    logger.info(f"Effective batch: {eff_batch} | Steps: {MAX_STEPS} | Checkpoint: every {SAVE_STEPS}")
+    logger.info(f"Effective batch: {BATCH_SIZE * GRAD_ACCUM} | Steps: {MAX_STEPS} | Checkpoint: every {SAVE_STEPS}")
     check_vram("before training")
 
-    # ── Train ────────────────────────────────────────────────────────────────
-    logger.info("🚀 Starting training...")
+    # Train
+    logger.info("🚀 Training starting...")
     trainer.train()
 
     elapsed = (datetime.now() - START).total_seconds()
-    logger.info(f"Training complete in {elapsed/3600:.2f} hours")
+    logger.info(f"Training done in {elapsed/3600:.2f}h")
     check_vram("after training")
 
-    # ── Save + Upload ────────────────────────────────────────────────────────
+    # Save adapter
     Path(ADAPTER_DIR).mkdir(parents=True, exist_ok=True)
-    logger.info(f"Saving adapter to {ADAPTER_DIR}/")
+    logger.info(f"Saving to {ADAPTER_DIR}/")
     trainer.save_model(ADAPTER_DIR)
     tokenizer.save_pretrained(ADAPTER_DIR)
 
-    logger.info("Uploading to HuggingFace...")
+    # Upload
+    logger.info("Uploading adapter to HF...")
     from huggingface_hub import HfApi, create_repo
     api = HfApi(token=hf_token)
     try:
         create_repo("my-ai-stack/Stack-4.0-Qwen-Agentic", exist_ok=True, repo_type="model")
     except Exception as e:
         logger.warning(f"Repo: {e}")
-
-    api.upload_folder(
-        folder_path=ADAPTER_DIR,
-        repo_id="my-ai-stack/Stack-4.0-Qwen-Agentic",
-        repo_type="model",
-    )
+    api.upload_folder(folder_path=ADAPTER_DIR, repo_id="my-ai-stack/Stack-4.0-Qwen-Agentic", repo_type="model")
     logger.info("✅ https://huggingface.co/my-ai-stack/Stack-4.0-Qwen-Agentic")
 
-    # ── Cleanup ──────────────────────────────────────────────────────────────
+    # Cleanup
     del model, trainer
     gc.collect()
     torch.cuda.empty_cache()
     check_vram("final")
-    logger.info("=" * 60)
     logger.info("ALL DONE")
-    logger.info("=" * 60)
 
 
 if __name__ == "__main__":
