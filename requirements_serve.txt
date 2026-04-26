@@ -1,0 +1,7 @@
+transformers>=4.36
+peft>=0.14.0
+accelerate>=0.25
+fastapi
+uvicorn[standard]
+pydantic
+torch
