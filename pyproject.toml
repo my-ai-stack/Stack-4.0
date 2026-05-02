@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "Stack-4.0"
+version = "0.1.0"
+description = "AI tool from my-ai-stack"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/my-ai-stack/Stack-4.0"
+Repository = "https://github.com/my-ai-stack/Stack-4.0"
